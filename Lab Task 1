@@ -1,0 +1,108 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
+
+
+# Tensors & Arrays
+
+print("\n=== Section 1: Tensors & Arrays ===")
+
+img = torch.rand(28, 28)
+batch = torch.rand(64, 1, 28, 28)
+rgb = torch.rand(16, 3, 64, 64)
+
+print("img shape:", img.shape)
+print("batch shape:", batch.shape)
+print("rgb shape:", rgb.shape)
+
+print("\nExplanation: (N, C, H, W) -> Batch size, Channels, Height, Width")
+print("Grayscale images use C=1, RGB images use C=3")
+
+
+# Feedforward Neural Network
+
+print("\n=== Section 2: Feedforward Neural Network ===")
+
+ffnn = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(28*28, 128),
+    nn.ReLU(),
+    nn.Linear(128, 10)
+)
+
+print(ffnn)
+print("\nReasoning:")
+print("- Non-linear activations (like ReLU) let the network model complex functions.")
+print("- Each Linear layer performs a matrix multiplication + bias addition.")
+
+
+# Training Loop
+
+print("\n=== Section 3: Training Loop on MNIST ===")
+
+# Load dataset
+transform = transforms.Compose([transforms.ToTensor()])
+train_data = datasets.MNIST(root="./data", train=True, download=True, transform=transform)
+test_data = datasets.MNIST(root="./data", train=False, download=True, transform=transform)
+
+train_loader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
+test_loader = torch.utils.data.DataLoader(test_data, batch_size=1000, shuffle=False)
+
+# Define loss and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(ffnn.parameters(), lr=0.001)
+
+train_losses = []
+test_accuracies = []
+
+for epoch in range(3):  # epochs minimum
+    running_loss = 0.0
+    ffnn.train()
+    for images, labels in train_loader:
+        optimizer.zero_grad()
+        outputs = ffnn(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item()
+    
+    avg_loss = running_loss / len(train_loader)
+    train_losses.append(avg_loss)
+    print(f"Epoch {epoch+1}: loss={avg_loss:.4f}")
+    
+    # Evaluate
+    ffnn.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in test_loader:
+            outputs = ffnn(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    accuracy = 100 * correct / total
+    test_accuracies.append(accuracy)
+    print(f"Test Accuracy: {accuracy:.2f}%")
+
+
+# Plot Results
+
+plt.figure()
+plt.plot(train_losses, label='Training Loss')
+plt.title('Training Loss over Epochs')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+plt.figure()
+plt.plot(test_accuracies, label='Test Accuracy', color='green')
+plt.title('Test Accuracy over Epochs')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy (%)')
+plt.legend()
+plt.show()
+
+
