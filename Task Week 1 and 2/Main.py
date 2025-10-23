@@ -1,8 +1,6 @@
-
 import os
 import math
 import argparse
-import time
 import random
 from dataclasses import dataclass
 from typing import List, Tuple
@@ -15,6 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 
+#  Utilities 
 
 def set_seed(seed: int = 1337):
     random.seed(seed)
@@ -24,7 +23,6 @@ def set_seed(seed: int = 1337):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     return seed
-
 
 def ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
@@ -36,26 +34,7 @@ def save_plot(fig, outpath: str, title: str = ""):
     fig.savefig(outpath, dpi=150)
     plt.close(fig)
 
-
-def task_tensors(outputs_dir: str):
-    import torch
-    seed = set_seed()
-    img = torch.rand(28, 28)
-    batch_gray = torch.rand(64, 1, 28, 28)  # (N, C, H, W)
-    batch_rgb  = torch.rand(16, 3, 64, 64)
-
-    print(f"[tensors] seed={seed}")
-    print("[tensors] img shape:", tuple(img.shape))
-    print("[tensors] batch_gray shape:", tuple(batch_gray.shape))
-    print("[tensors] batch_rgb  shape:", tuple(batch_rgb.shape))
-
-
-    fig = plt.figure(figsize=(4, 4))
-    plt.imshow(img.numpy(), cmap="gray")
-    plt.title("Example 28x28 grayscale tensor")
-    plt.axis("off")
-    save_plot(fig, os.path.join(outputs_dir, "tensors_example.png"), title="Tensors & Arrays")
-
+# Models 
 
 class FFNN(nn.Module):
     def __init__(self):
@@ -71,21 +50,21 @@ class FFNN(nn.Module):
 class SimpleCNN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 8, kernel_size=5, stride=1, padding=2)  # preserve 28x28
-        self.pool  = nn.MaxPool2d(2,2)  # 14x14
-        self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=1, padding=1) # 14x14
+        self.conv1 = nn.Conv2d(1, 8, kernel_size=5, stride=1, padding=2)
+        self.pool  = nn.MaxPool2d(2,2)
+        self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=1, padding=1)
         self.fc1   = nn.Linear(16*14*14, 64)
         self.fc2   = nn.Linear(64, 10)
-
     def forward(self, x):
-        x = F.relu(self.conv1(x))  
-        x = self.pool(x)           
-        x = F.relu(self.conv2(x)) 
+        x = F.relu(self.conv1(x))
+        x = self.pool(x)
+        x = F.relu(self.conv2(x))
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
 
+#  Data
 
 def get_mnist_loaders(batch_size=64):
     tfm = transforms.Compose([transforms.ToTensor()])
@@ -96,6 +75,7 @@ def get_mnist_loaders(batch_size=64):
         DataLoader(test_ds,  batch_size=batch_size, shuffle=False)
     )
 
+#  Training 
 
 @dataclass
 class TrainLog:
@@ -147,7 +127,6 @@ def train_model(
         log.epochs.append(ep); log.losses.append(avg_loss); log.test_accs.append(acc)
         print(f"[{save_prefix}] epoch={ep} loss={avg_loss:.4f} acc={acc:.4f}")
 
-
     fig1 = plt.figure()
     plt.plot(log.epochs, log.losses, marker="o")
     plt.xlabel("Epoch"); plt.ylabel("Training Loss"); plt.title(f"{title} — Loss")
@@ -159,6 +138,7 @@ def train_model(
     save_plot(fig2, os.path.join(outputs_dir, f"{save_prefix}_acc.png"))
     return log
 
+# Tasks
 
 def task_ffnn(outputs_dir: str):
     set_seed()
@@ -169,82 +149,9 @@ def task_ffnn(outputs_dir: str):
                     epochs=3, lr=0.05, title="FFNN on MNIST",
                     outputs_dir=outputs_dir, save_prefix="ffnn")
 
-
-def numerical_grad(f, x: torch.Tensor, eps: float = 1e-4):
-    # f: function mapping x -> scalar loss tensor
-    x_np = x.detach().cpu().numpy().copy()
-    grad = np.zeros_like(x_np)
-    for i in range(x_np.size):
-        old = x_np.flat[i]
-        x_np.flat[i] = old + eps
-        f_pos = f(torch.from_numpy(x_np).to(x.device)).item()
-        x_np.flat[i] = old - eps
-        f_neg = f(torch.from_numpy(x_np).to(x.device)).item()
-        x_np.flat[i] = old
-        grad.flat[i] = (f_pos - f_neg) / (2*eps)
-    return torch.tensor(grad, dtype=x.dtype, device=x.device)
-
-def task_gradcheck(outputs_dir: str):
-    set_seed()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-   
-    W1 = torch.nn.Parameter(torch.randn(4, 3, device=device) * 0.1)
-    b1 = torch.nn.Parameter(torch.zeros(4, device=device))
-    W2 = torch.nn.Parameter(torch.randn(2, 4, device=device) * 0.1)
-    b2 = torch.nn.Parameter(torch.zeros(2, device=device))
-
-    x = torch.randn(3, device=device)
-    y = torch.tensor(1, device=device)  
-
-    def forward_params(vec):
-       
-        h = torch.relu(W1 @ x + b1)
-        logits = W2 @ h + b2
-        loss = F.cross_entropy(logits.unsqueeze(0), y.unsqueeze(0))
-        return loss
-
-   
-    for p in [W1, b1, W2, b2]:
-        if p.grad is not None:
-            p.grad.zero_()
-    loss = forward_params(x)
-    loss.backward()
-    grads_analytical = torch.cat([W1.grad.flatten(), b1.grad, W2.grad.flatten(), b2.grad])
-
-   
-    def loss_wrt_param(p):
-        def f(_x):
-            with torch.no_grad():
-                p.copy_(_x.reshape_as(p))
-            return forward_params(x)
-        return f
-
-    grads_num = []
-    for p in [W1, b1, W2, b2]:
-        with torch.no_grad():
-            p_clone = p.detach().clone().requires_grad_(False)
-        g = numerical_grad(loss_wrt_param(p), p_clone, eps=1e-4)
-        grads_num.append(g.flatten())
-    grads_numerical = torch.cat(grads_num)
-
-
-    diff = torch.norm(grads_analytical - grads_numerical) / (torch.norm(grads_analytical) + 1e-8)
-    print(f"[gradcheck] relative error = {diff.item():.6e} (<= ~1e-2 is good)")
-
-  
-    k = min(20, grads_analytical.numel())
-    fig = plt.figure()
-    idx = np.arange(k)
-    plt.bar(idx-0.15, grads_analytical[:k].detach().cpu().numpy(), width=0.3, label="analytical")
-    plt.bar(idx+0.15, grads_numerical[:k].detach().cpu().numpy(), width=0.3, label="numerical")
-    plt.legend(); plt.title(f"Gradient check (rel err {diff.item():.2e})"); plt.xlabel("param idx"); plt.ylabel("grad")
-    save_plot(fig, os.path.join(outputs_dir, "gradcheck_bar.png"))
-
-
 def visualize_first_layer_filters(model: SimpleCNN, outputs_dir: str):
     with torch.no_grad():
-        w = model.conv1.weight.cpu()  
-     
+        w = model.conv1.weight.cpu()
         fmin = w.min(dim=-1, keepdim=True)[0].min(dim=-2, keepdim=True)[0]
         fmax = w.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0]
         w_norm = (w - fmin) / (fmax - fmin + 1e-8)
@@ -264,11 +171,10 @@ def task_cnn(outputs_dir: str):
     train_loader, test_loader = get_mnist_loaders(batch_size=128)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = SimpleCNN()
-    log = train_model(model, train_loader, test_loader, device,
-                      epochs=3, lr=0.01, title="CNN on MNIST",
-                      outputs_dir=outputs_dir, save_prefix="cnn")
+    _ = train_model(model, train_loader, test_loader, device,
+                    epochs=3, lr=0.01, title="CNN on MNIST",
+                    outputs_dir=outputs_dir, save_prefix="cnn")
     visualize_first_layer_filters(model, outputs_dir)
-
 
 def task_sweep(outputs_dir: str):
     set_seed()
@@ -281,7 +187,6 @@ def task_sweep(outputs_dir: str):
         logs[lr] = train_model(model, train_loader, test_loader, device,
                                epochs=3, lr=lr, title=f"FFNN (lr={lr})",
                                outputs_dir=outputs_dir, save_prefix=f"sweep_lr_{str(lr).replace('.','_')}")
-  
     fig = plt.figure()
     for lr in lrs:
         plt.plot(logs[lr].epochs, logs[lr].losses, marker="o", label=f"lr={lr}")
@@ -289,9 +194,7 @@ def task_sweep(outputs_dir: str):
     plt.legend()
     save_plot(fig, os.path.join(outputs_dir, "sweep_loss_compare.png"))
 
-
 def conv_out_size(H: int, W: int, k: int, s: int, p: int, d: int=1) -> Tuple[int,int]:
-    # per-dimension formula: out = floor((in + 2p - d*(k-1) - 1)/s + 1)
     def one_dim(n):
         return math.floor((n + 2*p - d*(k-1) - 1)/s + 1)
     return one_dim(H), one_dim(W)
@@ -299,14 +202,12 @@ def conv_out_size(H: int, W: int, k: int, s: int, p: int, d: int=1) -> Tuple[int
 def task_convarith(outputs_dir: str):
     set_seed()
     cases = [
-      
         (28,28,5,1,2,1),
         (28,28,3,2,1,1),
         (32,32,3,1,0,1),
         (64,64,7,2,3,1),
         (64,64,3,1,1,2),
     ]
-
     rows = []
     for (H,W,k,s,p,d) in cases:
         h_out, w_out = conv_out_size(H,W,k,s,p,d)
@@ -317,7 +218,6 @@ def task_convarith(outputs_dir: str):
         rows.append((H,W,k,s,p,d,h_out,w_out, y.shape[-2], y.shape[-1]))
         print(f"[conv] in=({H},{W}) k={k} s={s} p={p} d={d} -> formula=({h_out},{w_out}), torch={tuple(y.shape[-2:])}")
 
-
     fig = plt.figure(figsize=(8,4))
     plt.axis("off")
     text = "H  W | k s p d | formula(H,W) | torch(H,W)\n" + "-"*48 + "\n"
@@ -326,27 +226,18 @@ def task_convarith(outputs_dir: str):
     plt.text(0.02, 0.98, text, va="top", family="monospace")
     save_plot(fig, os.path.join(outputs_dir, "conv_arith_checks.png"), title="Convolution arithmetic checks")
 
-
+#  Main 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tasks", nargs="*", default=["tensors","ffnn","gradcheck","cnn","sweep","convarith"])
+    parser.add_argument("--tasks", nargs="*", default=["ffnn","cnn","sweep","convarith"])
     parser.add_argument("--outputs", type=str, default="./outputs")
     args = parser.parse_args()
 
     ensure_dir(args.outputs)
-
-    if "tensors" in args.tasks:
-        task_tensors(args.outputs)
-    if "ffnn" in args.tasks:
-        task_ffnn(args.outputs)
-    if "gradcheck" in args.tasks:
-        task_gradcheck(args.outputs)
-    if "cnn" in args.tasks:
-        task_cnn(args.outputs)
-    if "sweep" in args.tasks:
-        task_sweep(args.outputs)
-    if "convarith" in args.tasks:
-        task_convarith(args.outputs)
+    if "ffnn" in args.tasks: task_ffnn(args.outputs)
+    if "cnn" in args.tasks: task_cnn(args.outputs)
+    if "sweep" in args.tasks: task_sweep(args.outputs)
+    if "convarith" in args.tasks: task_convarith(args.outputs)
 
 if __name__ == "__main__":
     main()
