@@ -1,5 +1,3 @@
- Weekly Summary — Deep Learning 
-
 Tasks completed this week:
 
 1) Tensors & NCHW basics
