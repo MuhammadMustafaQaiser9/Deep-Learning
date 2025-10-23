@@ -3,7 +3,7 @@ Tasks completed this week:
 1) Tensors & NCHW basics
 - Verified image/batch tensor shapes and visualized a random 28×28 grayscale tensor.
 - Seed used: 1337.
-- Figure: tensors_example.png
+
 
 2) Feedforward Neural Network (FFNN) on MNIST (≥ 3 epochs)
 - Trained for 3 epochs with SGD (lr=0.05).
@@ -16,7 +16,6 @@ Tasks completed this week:
 3) Backprop Check (Finite-Difference Gradient Check)
 - Implemented numerical gradient approximation and compared to autograd.
 - Relative error :1.150553e-03 (≤ 1e−2 is good).
-- Figure:gradcheck_bar.png (first 20 params: analytical vs numerical)
 
 4) CNN Baseline + First-Layer Filter Visualization
 - CNN: Conv(1→8, k=5, p=2) → MaxPool(2) → Conv(8→16, k=3, p=1) → FC(64) → FC(10).
